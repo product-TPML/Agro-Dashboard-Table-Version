@@ -218,7 +218,7 @@ Variety results are always shown in the form:
 
 ### Table page behavior
 
-There is one shared table view with pre-applied context.
+There is one shared results view with pre-applied context.
 
 #### Commodity search
 
@@ -244,7 +244,7 @@ That means:
 - only valid combinations are shown
 - impossible combinations are not available in dropdowns
 
-The current filter UI on the table page uses a floating filter action button instead of always-visible inline controls.
+The current filter UI on the results page uses a floating filter action button instead of always-visible inline controls.
 
 Clicking that button opens a popup with:
 
@@ -279,50 +279,63 @@ Most mappings follow district/taluk geography directly. A small number of market
 - `ENDI` -> treated as `Indi` in Vijayapura district
 - `YARAHALLI` -> mapped to the APMC yard reference in H. D. Kote taluk, Mysuru district
 
-### Table data behavior
+### Results card behavior
 
-The current table shows:
+The current results surface shows:
 
 - the latest row only for each exact `commodity + market + variety + grade` combination after applying the selected context and active filters
-- rows sorted by `market`
-- `arrivals + unit` merged into a single column labeled `Arrivals And Units`
-- price columns labeled with rupee units:
+- results sorted by `market`
+- one full-width card per result on both mobile and desktop
+- context-aware primary headings inside each card:
+  - market search -> commodity is primary
+  - commodity search -> market is primary
+  - variety search -> market is primary, with variety and grade grouped below
+- grouped card sections for:
+  - identity
+  - prices
+  - arrivals / units
+  - price updates
+
+Card content currently includes:
+
+- `Arrivals And Units`
+- price labels with rupee units:
   - `Max Price (Rs.)`
   - `Min Price (Rs.)`
   - `Modal Price (Rs.)`
-- two trailing date columns:
-  - `Latest Price Update At`
-  - `Previous Price Update At`
+- a single `Price Updates` block with:
+  - `Latest`
+  - `Previous`
 
-The table does not show `report_date` as a standalone column.
-
-The table-screen UI also currently uses:
+The results UI also currently uses:
 
 - tighter mobile padding than the earlier prototype
-- only locked context chips at the top of the table view, with no duplicate black heading text
+- only locked context chips at the top of the results view, with no duplicate black heading text
 - a top-left `Home` button beside the language toggle area
+- a floating filter action button with an onboarding hint animation
 
-For each row, the price cells also show the absolute change from the previous comparable update for the exact:
+For each result card, the price block also shows the absolute change from the previous comparable update for the exact:
 
 - `commodity + market + variety + grade`
 
 Delta behavior:
 
-- increase -> green rising indicator with `(+value)`
-- decrease -> red falling indicator with `(-value)`
-- no change -> `(0)`
+- increase -> green rising indicator with `+value`
+- decrease -> red falling indicator with `-value`
+- no change -> `0`
 - no earlier comparable row -> `No earlier update`
 
-Both table date columns use `DD-MM-YYYY`.
+Both date values use `DD-MM-YYYY`.
 
-### Row expansion
+### Card expansion
 
-Clicking a row expands an **inline history panel** for the exact:
+Clicking `See Price History` expands an **inline history panel inside the card** for the exact:
 
 - `commodity + market + variety + grade`
 
 The history panel shows:
 
+- only the heading `Price History`
 - min price
 - max price
 - modal price
@@ -336,6 +349,7 @@ The history panel shows:
 - an in-chart value tooltip plus a compact summary block for the selected date
 - x-axis dates in `DD-MM`
 - tooltip and selected-date displays in `DD-MM-YYYY`
+- horizontal scrolling isolated to the graph area only
 
 When multiple series overlap, all three remain visible. The chart draws `max` last so it stays visually strongest without hiding `min` or `modal`.
 

@@ -713,21 +713,21 @@
             <div class="table-stack">
               ${renderSearchPanel()}
 
-            <section class="panel table-card">
-              <div class="table-head">
-                <div>
-                  <p class="search-label">Table View</p>
-                  <div class="locked-headings">${formatLockedHeadings()}</div>
-                  <p>Use the filters to narrow the list. Click any row to view the recent price trend for that exact commodity entry.</p>
+              <section class="panel table-card">
+                <div class="table-head">
+                  <div>
+                    <p class="search-label">Table View</p>
+                    <div class="locked-headings">${formatLockedHeadings()}</div>
+                    <p>Use the filters to narrow the list. Click any row to view the recent price trend for that exact commodity entry.</p>
+                  </div>
                 </div>
-              </div>
 
-              ${renderFilterLauncher()}
+                ${renderFilterLauncher()}
 
-              <div class="table-wrap" data-preserve-scroll-id="table-wrap">
-                ${renderTable(rows)}
-              </div>
-            </section>
+                <div class="table-wrap" data-preserve-scroll-id="table-wrap">
+                  ${renderResults(rows)}
+                </div>
+              </section>
             </div>
           </section>
         </main>
@@ -834,6 +834,9 @@
     window.scrollTo(snapshot.windowX, snapshot.windowY);
 
     if (!snapshot.tableWrap) {
+      if (snapshot.filterModalBody || (snapshot.filterResults && snapshot.filterResults.length)) {
+        restoreFilterScrollState(snapshot);
+      }
       return;
     }
 
@@ -874,7 +877,7 @@
       <section class="panel search-panel" data-search-root>
         <label class="search-label">Search commodities, markets, or varieties</label>
         <div class="search-box">
-          <span>⌕</span>
+          <span>&#8981;</span>
           <input
             type="text"
             autocomplete="off"
@@ -1078,7 +1081,7 @@
     `;
   }
 
-  function renderTable(rows) {
+  function renderResults(rows) {
     if (!state.context) {
       return `<div class="empty-state">Loading rows...</div>`;
     }
@@ -1087,105 +1090,132 @@
       return `<div class="empty-state">No rows match the current combination. The filter options stay constrained to valid combinations only, so clearing filters should broaden the result set.</div>`;
     }
 
-    const columns = getVisibleColumns();
-
     return `
-      <table>
-        <thead>
-          <tr>
-            ${columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}
-          </tr>
-        </thead>
-        <tbody>
-          ${rows.map((row) => renderTableRow(row, columns)).join("")}
-        </tbody>
-      </table>
+      <div class="results-list">
+        ${rows.map((row) => renderResultCard(row)).join("")}
+      </div>
     `;
   }
 
-  function getVisibleColumns() {
-    const columns = [
-      { key: "commodity", label: "Commodity" },
-      { key: "market", label: "Market" },
-      { key: "variety", label: "Variety" },
-      { key: "grade", label: "Grade" },
-      { key: "arrivalsUnit", label: "Arrivals And Units" },
-      { key: "maxPrice", label: "Max Price (Rs.)" },
-      { key: "minPrice", label: "Min Price (Rs.)" },
-      { key: "modalPrice", label: "Modal Price (Rs.)" },
-      { key: "priceUpdates", label: "Price Updates" },
-    ];
+  function getCardPresentation(row) {
+    const type = state.context ? state.context.type : "";
 
-    if (!state.context) {
-      return columns;
+    if (type === "market") {
+      return {
+        titleLabel: "Commodity",
+        titleValue: translateEntity("commodity", row.commodity),
+        meta: [
+          { label: "Variety", value: translateEntity("variety", row.variety) },
+          { label: "Grade", value: row.grade },
+        ],
+      };
     }
 
-    const hidden = new Set(Object.keys(state.context.locked));
-    return columns.filter((column) => !hidden.has(column.key));
+    if (type === "commodity") {
+      return {
+        titleLabel: "Market",
+        titleValue: translateEntity("market", row.market),
+        meta: [
+          { label: "Variety", value: translateEntity("variety", row.variety) },
+          { label: "Grade", value: row.grade },
+        ],
+      };
+    }
+
+    if (type === "variety") {
+      return {
+        titleLabel: "Market",
+        titleValue: translateEntity("market", row.market),
+        meta: [
+          { label: "Variety", value: translateEntity("variety", row.variety) },
+          { label: "Grade", value: row.grade },
+        ],
+      };
+    }
+
+    return {
+      titleLabel: "Market",
+      titleValue: translateEntity("market", row.market),
+      meta: [
+        { label: "Commodity", value: translateEntity("commodity", row.commodity) },
+        { label: "Variety", value: translateEntity("variety", row.variety) },
+        { label: "Grade", value: row.grade },
+      ],
+    };
   }
 
-  function renderTableRow(row, columns) {
+  function renderResultCard(row) {
     const isExpanded = row.rowKey === state.expandedRowKey;
     const historyRows = isExpanded ? getHistoryRows(row) : [];
+    const presentation = getCardPresentation(row);
+    const previousRow = getPreviousComparableRow(row);
     return `
-      <tr data-row-key="${escapeAttribute(row.rowKey)}" data-clickable="true">
-        ${columns.map((column) => renderCell(row, column)).join("")}
-      </tr>
-      ${isExpanded ? `
-        <tr>
-          <td colspan="${columns.length}">
+      <article class="result-card ${isExpanded ? "is-expanded" : ""}" data-row-key="${escapeAttribute(row.rowKey)}">
+        <div class="result-card-main">
+          <section class="result-card-identity">
+            <p class="result-card-label">${escapeHtml(presentation.titleLabel)}</p>
+            <h3>${escapeHtml(presentation.titleValue)}</h3>
+            <div class="result-card-meta">
+              ${presentation.meta.map((entry) => `
+                <div class="result-meta-item">
+                  <span class="result-meta-label">${escapeHtml(entry.label)}</span>
+                  <span class="result-meta-value">${escapeHtml(entry.value)}</span>
+                </div>
+              `).join("")}
+            </div>
+          </section>
+
+          <section class="result-card-prices">
+            ${renderPriceGroup("Max Price (Rs.)", row.maxPrice, getPreviousPriceDelta(row, "maxPrice", previousRow))}
+            ${renderPriceGroup("Min Price (Rs.)", row.minPrice, getPreviousPriceDelta(row, "minPrice", previousRow))}
+            ${renderPriceGroup("Modal Price (Rs.)", row.modalPrice, getPreviousPriceDelta(row, "modalPrice", previousRow))}
+          </section>
+
+          <section class="result-card-details">
+            <div class="result-detail-block">
+              <span class="result-detail-label">Arrivals And Units</span>
+              <span class="result-detail-value">${escapeHtml(`${formatNumber(row.arrivals)} ${row.unit}`)}</span>
+            </div>
+            <div class="result-detail-block">
+              <span class="result-detail-label">Price Updates</span>
+              <div class="date-stack">
+                <div class="date-stack-item">
+                  <span class="date-stack-label">Latest</span>
+                  <span>${escapeHtml(formatDateFull(row.reportDate))}</span>
+                </div>
+                <div class="date-stack-item">
+                  <span class="date-stack-label">Previous</span>
+                  <span>${escapeHtml(previousRow ? formatDateFull(previousRow.reportDate) : "-")}</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <button type="button" class="result-card-toggle" data-toggle-history="${escapeAttribute(row.rowKey)}" aria-expanded="${isExpanded ? "true" : "false"}">
+          <span class="result-card-toggle-label">See Price History</span>
+          <span class="result-card-toggle-chevron">${isExpanded ? "&#9652;" : "&#9662;"}</span>
+        </button>
+
+        ${isExpanded ? `
+          <div class="result-card-history">
             ${renderHistory(row, historyRows)}
-          </td>
-        </tr>
-      ` : ""}
+          </div>
+        ` : ""}
+      </article>
     `;
   }
 
-  function renderCell(row, column) {
-    const value = row[column.key];
-    const previousRow = needsPreviousRow(column.key) ? getPreviousComparableRow(row) : null;
-
-    if (column.key === "arrivalsUnit") {
-      return `<td>${escapeHtml(`${formatNumber(row.arrivals)} ${row.unit}`)}</td>`;
-    }
-    if (column.key === "arrivals") {
-      return `<td class="price-cell">${formatNumber(value)}</td>`;
-    }
-    if (column.key.endsWith("Price")) {
-      const delta = getPreviousPriceDelta(row, column.key, previousRow);
-      return `
-        <td class="price-cell">
-          <div class="price-stack">
-            <span class="price-value">${formatCurrency(value)}</span>
-            ${renderPriceDelta(delta)}
-          </div>
-        </td>
-      `;
-    }
-    if (column.key === "priceUpdates") {
-      return `
-        <td>
-          <div class="date-stack">
-            <div class="date-stack-item">
-              <span class="date-stack-label">Latest</span>
-              <span>${escapeHtml(formatDateFull(row.reportDate))}</span>
-            </div>
-            <div class="date-stack-item">
-              <span class="date-stack-label">Previous</span>
-              <span>${escapeHtml(previousRow ? formatDateFull(previousRow.reportDate) : "-")}</span>
-            </div>
-          </div>
-        </td>
-      `;
-    }
-    if (column.key === "commodity" || column.key === "market" || column.key === "variety") {
-      return `<td>${escapeHtml(translateEntity(column.key, String(value)))}</td>`;
-    }
-    return `<td>${escapeHtml(String(value))}</td>`;
-  }
-
-  function needsPreviousRow(columnKey) {
-    return columnKey.endsWith("Price") || columnKey === "priceUpdates";
+  function renderPriceGroup(label, value, delta) {
+    return `
+      <div class="result-price-group">
+        <span class="result-price-label">${escapeHtml(label)}</span>
+        <div class="price-stack">
+          <span class="price-value">${formatCurrency(value)}</span>
+          ${renderPriceDelta(delta)}
+        </div>
+      </div>
+    `;
   }
 
   function getPreviousComparableRow(row) {
@@ -1259,12 +1289,11 @@
         <div class="history-top">
           <div>
             <p class="search-label">Price History</p>
-            <h3>${escapeHtml(`${translateEntity("commodity", row.commodity)} / ${translateEntity("market", row.market)} / ${translateEntity("variety", row.variety)} / ${row.grade}`)}</h3>
+            <h3>Price History</h3>
             <p>Showing the recent trend ending on ${escapeHtml(formatDateFull(row.reportDate))}.</p>
           </div>
           <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
             <span class="window-chip">${windowLabel}</span>
-            <button type="button" class="inline-button" data-close-history="${escapeAttribute(row.rowKey)}">Close</button>
           </div>
         </div>
         <div class="chart-shell">
@@ -1274,10 +1303,17 @@
             <span class="legend-key legend-modal"><span></span>Modal price</span>
           </div>
           <div class="history-grid">
-            ${renderChart(historyRows, activePoint)}
+            <div class="chart-scroll">
+              ${renderChart(historyRows, activePoint)}
+            </div>
             ${renderChartSummary(activePoint)}
             <div class="axis-note">Trend is shown for this exact commodity, market, variety, and grade combination.</div>
           </div>
+        </div>
+        <div class="history-collapse-wrap">
+          <button type="button" class="history-collapse-button" data-close-history="${escapeAttribute(row.rowKey)}" aria-label="Collapse price history">
+            <span class="history-collapse-arrow">&#9652;</span>
+          </button>
         </div>
       </section>
     `;
@@ -1493,9 +1529,10 @@
       button.addEventListener("click", clearFilterDrafts);
     });
 
-    document.querySelectorAll("[data-row-key]").forEach((row) => {
-      row.addEventListener("click", () => {
-        const key = row.dataset.rowKey;
+    document.querySelectorAll("[data-toggle-history]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const key = button.dataset.toggleHistory;
         if (state.expandedRowKey === key) {
           state.expandedRowKey = null;
           state.activeChartDate = null;
@@ -1764,6 +1801,8 @@
       activateDistrictPath(path, district);
     });
 
+    renderDistrictLabels(rootSvg, pathLookup);
+    renderActiveDistrictOutline(rootSvg, pathLookup);
     renderMarketPins(rootSvg, pathLookup);
     bindMapGestures(viewport, rootSvg);
   }
@@ -1783,9 +1822,67 @@
     const fill = MAP_DISTRICT_COLORS[colorIndex];
 
     path.style.fill = fill;
-    path.style.stroke = isActive ? "#7f1218" : "#fff7f2";
-    path.style.strokeWidth = isActive ? "2.8" : "1.4";
+    path.style.stroke = "#fff7f2";
+    path.style.strokeWidth = "1.4";
     path.style.opacity = isActive ? "1" : "0.94";
+  }
+
+  function renderDistrictLabels(rootSvg, pathLookup) {
+    const existingLayer = rootSvg.querySelector("#district-label-layer");
+    if (existingLayer) {
+      existingLayer.remove();
+    }
+
+    if (state.activeMapDistrictSlug) {
+      return;
+    }
+
+    const labelLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    labelLayer.setAttribute("id", "district-label-layer");
+    labelLayer.setAttribute("class", "district-label-layer");
+
+    state.mapDistricts.forEach((district) => {
+      const pathNode = pathLookup.get(district.districtSlug);
+      if (!pathNode) {
+        return;
+      }
+
+      const bounds = pathNode.getBBox();
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", String(bounds.x + (bounds.width / 2)));
+      text.setAttribute("y", String(bounds.y + (bounds.height / 2)));
+      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("class", "district-map-label");
+      text.textContent = district.district;
+      labelLayer.appendChild(text);
+    });
+
+    rootSvg.appendChild(labelLayer);
+  }
+
+  function renderActiveDistrictOutline(rootSvg, pathLookup) {
+    const existingOutline = rootSvg.querySelector("#district-active-outline");
+    if (existingOutline) {
+      existingOutline.remove();
+    }
+
+    const district = getActiveMapDistrict();
+    if (!district) {
+      return;
+    }
+
+    const pathNode = pathLookup.get(district.districtSlug);
+    if (!pathNode) {
+      return;
+    }
+
+    const outline = pathNode.cloneNode(false);
+    outline.setAttribute("id", "district-active-outline");
+    outline.setAttribute("class", "district-active-outline");
+    outline.removeAttribute("data-district-slug");
+    outline.style.fill = "none";
+    outline.style.pointerEvents = "none";
+    rootSvg.appendChild(outline);
   }
 
   function findSvgPathTarget(target) {
@@ -1946,6 +2043,17 @@
 
     viewport.addEventListener("pointerdown", (event) => {
       if (event.pointerType === "touch") {
+        return;
+      }
+
+      const target = event.target;
+      const isInteractiveTarget = Boolean(
+        target
+        && typeof target.closest === "function"
+        && target.closest(".map-region, .market-marker")
+      );
+
+      if (event.button !== 0 || !isMapZoomedIn() || isInteractiveTarget) {
         return;
       }
 
