@@ -1077,7 +1077,7 @@ select {
 
 .chart-layout {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-columns: 25px minmax(0, 1fr);
   align-items: start;
   gap: 0;
 }
@@ -1486,7 +1486,7 @@ select {
   }
 
   .chart-layout {
-    grid-template-columns: 36px minmax(0, 1fr);
+    grid-template-columns: 25px minmax(0, 1fr);
   }
 
   .filter-fab {

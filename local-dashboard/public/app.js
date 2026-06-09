@@ -1453,7 +1453,7 @@
       `;
     }
 
-    const axisWidth = 40;
+    const axisWidth = 25;
     const width = Math.max(700, 120 + (rows.length - 1) * 96);
     const height = 320;
     const paddingX = 38;
@@ -1515,7 +1515,7 @@
         <div class="chart-axis-y" aria-hidden="true">
           <svg viewBox="0 0 ${axisWidth} ${height}" width="${axisWidth}" height="${height}">
             <line x1="${axisWidth}" y1="${paddingTop}" x2="${axisWidth}" y2="${height - paddingBottom}" stroke="#d5d8e6" />
-            <line x1="0" y1="${height - paddingBottom}" x2="${axisWidth}" y2="${height - paddingBottom}" stroke="#cfd5e3" stroke-width="1.6" />
+            <line x1="${axisWidth - 1}" y1="${height - paddingBottom}" x2="${axisWidth}" y2="${height - paddingBottom}" stroke="#cfd5e3" stroke-width="1.6" />
             ${yAxisTicks}
           </svg>
         </div>
