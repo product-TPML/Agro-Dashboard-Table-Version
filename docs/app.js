@@ -1223,9 +1223,25 @@
       return `<div class="empty-state">No rows match the current combination. The filter options stay constrained to valid combinations only, so clearing filters should broaden the result set.</div>`;
     }
 
+    const columns = getTableColumns();
     return `
-      <div class="results-list">
-        ${rows.map((row) => renderResultCard(row)).join("")}
+      <div class="results-table-wrap">
+        <table class="results-table">
+          <thead>
+            <tr>
+              ${columns.headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}
+              <th>Arrivals &amp; Units</th>
+              <th>Max Price (Rs.)</th>
+              <th>Min Price (Rs.)</th>
+              <th>Modal Price (Rs.)</th>
+              <th>Latest Update</th>
+              <th>Previous Update</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => renderResultRow(row, columns)).join("")}
+          </tbody>
+        </table>
       </div>
     `;
   }
@@ -1274,6 +1290,56 @@
         { label: "Variety", value: translateEntity("variety", row.variety) },
         { label: "Grade", value: row.grade },
       ],
+    };
+  }
+
+  function getTableColumns() {
+    const type = state.context ? state.context.type : "";
+    const fixed = 6;
+
+    if (type === "market") {
+      return {
+        headers: ["Commodity", "Variety", "Grade"],
+        getCells: (row) => [
+          `<td class="result-col-primary">${escapeHtml(translateEntity("commodity", row.commodity))}</td>`,
+          `<td>${escapeHtml(translateEntity("variety", row.variety))}</td>`,
+          `<td>${escapeHtml(row.grade)}</td>`,
+        ],
+        count: 3 + fixed,
+      };
+    }
+
+    if (type === "commodity") {
+      return {
+        headers: ["Market", "Variety", "Grade"],
+        getCells: (row) => [
+          `<td class="result-col-primary">${escapeHtml(translateEntity("market", row.market))}</td>`,
+          `<td>${escapeHtml(translateEntity("variety", row.variety))}</td>`,
+          `<td>${escapeHtml(row.grade)}</td>`,
+        ],
+        count: 3 + fixed,
+      };
+    }
+
+    if (type === "variety") {
+      return {
+        headers: ["Market", "Grade"],
+        getCells: (row) => [
+          `<td class="result-col-primary">${escapeHtml(translateEntity("market", row.market))}</td>`,
+          `<td>${escapeHtml(row.grade)}</td>`,
+        ],
+        count: 2 + fixed,
+      };
+    }
+
+    return {
+      headers: ["Market", "Variety", "Grade"],
+      getCells: (row) => [
+        `<td class="result-col-primary">${escapeHtml(translateEntity("market", row.market))}</td>`,
+        `<td>${escapeHtml(translateEntity("variety", row.variety))}</td>`,
+        `<td>${escapeHtml(row.grade)}</td>`,
+      ],
+      count: 3 + fixed,
     };
   }
 
@@ -1337,6 +1403,41 @@
           </div>
         ` : ""}
       </article>
+    `;
+  }
+
+  function renderResultRow(row, columns) {
+    const isExpanded = row.rowKey === state.expandedRowKey;
+    const historyRows = isExpanded ? getHistoryRows(row) : [];
+    const previousRow = getPreviousComparableRow(row);
+    return `
+      <tr class="result-row ${isExpanded ? "is-expanded" : ""}" data-toggle-history="${escapeAttribute(row.rowKey)}">
+        ${columns.getCells(row).join("")}
+        <td>${escapeHtml(`${formatNumber(row.arrivals)} ${row.unit}`)}</td>
+        <td class="result-col-price">
+          <span class="price-value price-value-max">${formatCurrency(row.maxPrice)}</span>
+          ${renderPriceDelta(getPreviousPriceDelta(row, "maxPrice", previousRow))}
+        </td>
+        <td class="result-col-price">
+          <span class="price-value price-value-min">${formatCurrency(row.minPrice)}</span>
+          ${renderPriceDelta(getPreviousPriceDelta(row, "minPrice", previousRow))}
+        </td>
+        <td class="result-col-price">
+          <span class="price-value price-value-modal">${formatCurrency(row.modalPrice)}</span>
+          ${renderPriceDelta(getPreviousPriceDelta(row, "modalPrice", previousRow))}
+        </td>
+        <td>${escapeHtml(formatDateFull(row.reportDate))}</td>
+        <td>${escapeHtml(previousRow ? formatDateFull(previousRow.reportDate) : "—")}</td>
+      </tr>
+      ${isExpanded ? `
+        <tr class="result-row-chart">
+          <td colspan="${columns.count}" class="result-row-chart-cell">
+            <div class="result-card-history">
+              ${renderHistory(row, historyRows)}
+            </div>
+          </td>
+        </tr>
+      ` : ""}
     `;
   }
 
