@@ -37,8 +37,8 @@ Current development shape:
 Current runtime commands:
 
 - `npm run build:static-db`
-- `npm run dashboard:local`
 - `npm run build:pages`
+- `npm run dashboard:local`
 
 The local dashboard is served at:
 
@@ -79,6 +79,9 @@ If the workbook changes, the database is rebuilt from scratch.
 - `scripts/build_static_db.js`
   Recreates the SQLite database from the workbook.
 
+- `scripts/build_pages_site.js`
+  Exports the static browser bundle and generated dashboard data into `docs/` for GitHub Pages.
+
 - `scripts/karnataka_market_district_mapping.json`
   Source file for district metadata and market-to-district geography used by the local DB.
 
@@ -98,7 +101,7 @@ If the workbook changes, the database is rebuilt from scratch.
   Active translation source for commodity, market, and variety labels in English and Kannada.
 
 - `package.json`
-  Contains both `build:static-db` and `dashboard:local`.
+  Contains `build:static-db`, `build:pages`, and `dashboard:local`.
 
 - `appscript/`
   Legacy Google Apps Script dashboard and mapping UI. Kept only as reference.
@@ -391,7 +394,7 @@ History window is determined by perishability and is not user-selectable:
 
 ## Current API Surface
 
-The local server currently exposes:
+The local Node server still exposes these development endpoints, but the GitHub Pages build does not depend on them:
 
 - `/api/health`
 - `/api/map`
@@ -465,7 +468,7 @@ Not implemented yet:
 - use the workbook as the rebuild source
 - keep the current dataset static
 - build a local Node-served HTML dashboard
-- generate a GitHub Pages-friendly static build from the same source UI
+- export a static Pages-ready bundle into `docs/`
 - make search the primary navigation path
 - keep row history inline in the results cards
 - use the local district map as a secondary navigation path from home
@@ -499,8 +502,12 @@ Reference-only files from that workflow:
 
 ## Operational Notes
 
-- rebuild the DB whenever the workbook changes:
+- regenerate the GitHub Pages bundle after database or public asset changes:
+  - `npm run build:pages`
+
+- rebuild the SQLite database when the workbook changes:
   - `npm run build:static-db`
+  - if the SQLite DB is locked, stop any running dashboard server first
 
 - start the local dashboard server with:
   - `npm run dashboard:local`

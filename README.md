@@ -1,6 +1,6 @@
 # Commodity Dashboard
 
-Local commodity dashboard project built from a static May 2026 snapshot.
+Local commodity dashboard project built from a static May 2026 snapshot, with a static export path for GitHub Pages.
 
 ## Current stack
 
@@ -14,6 +14,7 @@ Local commodity dashboard project built from a static May 2026 snapshot.
 ```bash
 npm install
 npm run build:static-db
+npm run build:pages
 npm run dashboard:local
 ```
 
@@ -21,6 +22,7 @@ Open `http://127.0.0.1:3180`.
 
 ## GitHub Pages build
 
+<<<<<<< HEAD
 This repo now supports a static Pages build.
 
 Build it with:
@@ -47,16 +49,23 @@ For GitHub Pages:
 ## Architecture note
 
 The original dashboard architecture was **not GitHub Pages-ready as-is**.
+=======
+Build the static site bundle with:
+>>>>>>> 9a8f25f (Refactor for GitHub Pages)
 
-Why:
+```bash
+npm run build:pages
+```
 
-- GitHub Pages only serves static files
-- this app currently depends on:
-  - a Node server
-  - SQLite reads
-  - JSON API routes such as `/api/context`, `/api/map`, and `/api/search-index`
+`npm run build:pages` exports the browser data into `local-dashboard/public/dashboard-data.json` and mirrors the publishable site into `docs/`.
 
+<<<<<<< HEAD
 That is why the Pages build converts the live local data source into static JSON before deployment.
+=======
+If `data/agro_dashboard.db` is open in another process, stop that process before running `npm run build:static-db`.
+
+For GitHub Pages, point the repository's Pages source at the `docs/` folder on the default branch.
+>>>>>>> 9a8f25f (Refactor for GitHub Pages)
 
 ## What should go to GitHub
 
@@ -71,6 +80,7 @@ Recommended to push:
 - `package-lock.json`
 - `README.md`
 - `Agro Dashboard - new data.xlsx` if you want the source workbook in the repo
+- `docs/` after running `npm run build:pages`
 
 Excluded by `.gitignore`:
 
