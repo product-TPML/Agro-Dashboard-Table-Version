@@ -25,6 +25,7 @@
     isFilterModalOpen: false,
     showFilterHint: false,
     shouldScrollTableIntoView: false,
+    shouldPrimeExpandedHistory: false,
     activeChartDate: null,
     expandedRowKey: null,
     searchToken: 0,
@@ -53,6 +54,7 @@
   let filterHintFinalizeTimer = null;
   let searchInputTimer = null;
   let renderFrameId = null;
+  let stickyTableHeaderCleanup = null;
 
   const MAP_DISTRICT_COLORS = [
     "#d85f52",
@@ -717,6 +719,7 @@
     const filterInputState = captureFilterInputState();
     const scrollState = captureScrollState();
     const rows = state.route.view === "table" && state.context ? getRowsForCurrentView() : [];
+    teardownStickyTableHeader();
 
     app.innerHTML = `
       <div class="shell">
@@ -762,6 +765,7 @@
                 </div>
 
                 ${renderFilterLauncher()}
+                ${renderStickyTableHeader(rows)}
 
                 <div class="table-wrap" data-preserve-scroll-id="table-wrap">
                   ${renderResults(rows)}
@@ -846,15 +850,16 @@
 
   function captureScrollState() {
     const tableWrap = document.querySelector("[data-preserve-scroll-id='table-wrap']");
+    const tableScroller = tableWrap ? tableWrap.querySelector(".results-table-wrap") : null;
     const filterModalBody = document.querySelector("[data-preserve-scroll-id='filter-modal-body']");
     const filterResults = [...document.querySelectorAll("[data-preserve-scroll-id='filter-search-results']")];
     const chartScroll = document.querySelector("[data-preserve-scroll-id='chart-scroll']");
     return {
       windowX: window.scrollX,
       windowY: window.scrollY,
-      tableWrap: tableWrap ? {
-        scrollLeft: tableWrap.scrollLeft,
-        scrollTop: tableWrap.scrollTop,
+      tableWrap: tableScroller ? {
+        scrollLeft: tableScroller.scrollLeft,
+        scrollTop: tableScroller.scrollTop,
       } : null,
       filterModalBody: filterModalBody ? {
         scrollTop: filterModalBody.scrollTop,
@@ -886,7 +891,8 @@
     }
 
     const tableWrap = document.querySelector("[data-preserve-scroll-id='table-wrap']");
-    if (!tableWrap) {
+    const tableScroller = tableWrap ? tableWrap.querySelector(".results-table-wrap") : null;
+    if (!tableScroller) {
       restoreChartScrollState(snapshot);
       if (snapshot.filterModalBody || (snapshot.filterResults && snapshot.filterResults.length)) {
         restoreFilterScrollState(snapshot);
@@ -894,8 +900,8 @@
       return;
     }
 
-    tableWrap.scrollLeft = snapshot.tableWrap.scrollLeft;
-    tableWrap.scrollTop = snapshot.tableWrap.scrollTop;
+    tableScroller.scrollLeft = snapshot.tableWrap.scrollLeft;
+    tableScroller.scrollTop = snapshot.tableWrap.scrollTop;
     restoreChartScrollState(snapshot);
     restoreFilterScrollState(snapshot);
   }
@@ -1229,13 +1235,7 @@
         <table class="results-table">
           <thead>
             <tr>
-              ${columns.headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}
-              <th>Arrivals &amp; Units</th>
-              <th>Max Price (Rs.)</th>
-              <th>Min Price (Rs.)</th>
-              <th>Modal Price (Rs.)</th>
-              <th>Latest Update</th>
-              <th>Previous Update</th>
+              ${renderResultsTableHeaderCells(columns)}
             </tr>
           </thead>
           <tbody>
@@ -1243,6 +1243,39 @@
           </tbody>
         </table>
       </div>
+    `;
+  }
+
+  function renderStickyTableHeader(rows) {
+    if (!rows.length) {
+      return "";
+    }
+
+    const columns = getTableColumns();
+    return `
+      <div class="results-sticky-header" data-sticky-table-header="true" aria-hidden="true" hidden>
+        <div class="results-sticky-header-viewport" data-sticky-table-header-viewport="true">
+          <table class="results-table results-table-sticky" data-sticky-table-header-table="true">
+            <thead>
+              <tr>
+                ${renderResultsTableHeaderCells(columns)}
+              </tr>
+            </thead>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderResultsTableHeaderCells(columns) {
+    return `
+      ${columns.headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}
+      <th>Arrivals &amp; Units</th>
+      <th>Max Price (Rs.)</th>
+      <th>Min Price (Rs.)</th>
+      <th>Modal Price (Rs.)</th>
+      <th>Latest Update</th>
+      <th>Previous Update</th>
     `;
   }
 
@@ -1522,9 +1555,13 @@
       <section class="history-card">
         <div class="chart-shell">
           <p class="chart-scroll-note">&lt;-- Scroll horizontally to see all dates --&gt;</p>
-          <div class="history-grid">
-            ${renderChart(historyRows, activePoint, row.rowKey)}
-            ${renderChartSummary(activePoint)}
+          <div class="history-layout">
+            <div class="history-chart-panel">
+              ${renderChart(historyRows, activePoint, row.rowKey)}
+            </div>
+            <div class="chart-summary-shell">
+              ${renderChartSummary(activePoint)}
+            </div>
             <div class="axis-note">Trend is shown for this exact commodity, market, variety, and grade combination.</div>
           </div>
         </div>
@@ -1620,7 +1657,15 @@
             ${yAxisTicks}
           </svg>
         </div>
-        <div class="chart-scroll" data-preserve-scroll-id="chart-scroll" data-chart-row-key="${escapeAttribute(rowKey)}" data-chart-initial-position="right">
+        <div
+          class="chart-scroll"
+          data-preserve-scroll-id="chart-scroll"
+          data-chart-row-key="${escapeAttribute(rowKey)}"
+          data-chart-initial-position="right"
+          data-chart-active-x="${activeX}"
+          data-chart-x-step="${xStep}"
+          data-chart-point-count="${rows.length}"
+        >
           <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Price history" data-chart-root="true">
             ${gridLines}
             <path d="${minPath}" fill="none" stroke="${PRICE_COLORS.min}" stroke-width="3" />
@@ -1641,11 +1686,11 @@
 
     return `
       <div class="chart-summary">
-        <div class="chart-summary-head">
-          <span>Selected Date</span>
-          <strong>${escapeHtml(formatDateFull(activePoint.reportDate))}</strong>
+        <div class="chart-summary-date">
+          <span class="chart-summary-date-label">Selected Date</span>
+          <strong class="chart-summary-date-value">${escapeHtml(formatDateFull(activePoint.reportDate))}</strong>
         </div>
-        <div class="chart-summary-grid">
+        <div class="chart-summary-metrics">
           <span class="chart-metric chart-metric-max chart-metric-slot-max">
             <span class="chart-metric-label"><span class="chart-metric-line chart-metric-line-max"></span>Max</span>
             <span class="chart-metric-value">${formatCurrency(activePoint.maxPrice)}</span>
@@ -1787,9 +1832,11 @@
         if (state.expandedRowKey === key) {
           state.expandedRowKey = null;
           state.activeChartDate = null;
+          state.shouldPrimeExpandedHistory = false;
         } else {
           state.expandedRowKey = key;
           state.activeChartDate = null;
+          state.shouldPrimeExpandedHistory = true;
         }
         render();
       });
@@ -1800,6 +1847,7 @@
         event.stopPropagation();
         state.expandedRowKey = null;
         state.activeChartDate = null;
+        state.shouldPrimeExpandedHistory = false;
         render();
       });
     });
@@ -1878,11 +1926,13 @@
 
   function setupVisualViewportTracking() {
     updateVisualViewportHeight();
+    syncExpandedHistoryLayout();
 
     if (!window.visualViewport) {
       window.addEventListener("resize", () => {
         updateVisualViewportHeight();
         updateTableWrapHeight();
+        syncExpandedHistoryLayout();
       });
       return;
     }
@@ -1892,12 +1942,14 @@
     window.addEventListener("resize", () => {
       updateVisualViewportHeight();
       updateTableWrapHeight();
+      syncExpandedHistoryLayout();
     });
   }
 
   function handleVisualViewportChange() {
     updateVisualViewportHeight();
     updateTableWrapHeight();
+    syncExpandedHistoryLayout();
 
     if (!state.isFilterModalOpen) {
       return;
@@ -1947,6 +1999,9 @@
   function runPostRenderEffects() {
     updateTableWrapHeight();
     syncFilterHintAnimation();
+    syncStickyTableHeader();
+    primeExpandedHistoryScroll();
+    syncExpandedHistoryLayout();
 
     if (state.shouldScrollTableIntoView && state.route.view === "table" && state.context) {
       const tableWrap = document.querySelector("[data-preserve-scroll-id='table-wrap']");
@@ -2001,15 +2056,231 @@
       return;
     }
 
-    if (window.innerWidth > 720) {
-      tableWrap.style.removeProperty("--table-wrap-height");
+    tableWrap.style.removeProperty("--table-wrap-height");
+  }
+
+  function primeExpandedHistoryScroll() {
+    if (!state.shouldPrimeExpandedHistory || !state.expandedRowKey) {
       return;
     }
 
-    const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-    const top = tableWrap.getBoundingClientRect().top;
-    const available = Math.max(240, Math.floor(viewportHeight - top - 12));
-    tableWrap.style.setProperty("--table-wrap-height", `${available}px`);
+    const tableWrap = document.querySelector("[data-preserve-scroll-id='table-wrap']");
+    const tableScroller = tableWrap ? tableWrap.querySelector(".results-table-wrap") : null;
+    const chartScroll = document.querySelector("[data-preserve-scroll-id='chart-scroll']");
+
+    window.requestAnimationFrame(() => {
+      if (tableScroller) {
+        tableScroller.scrollLeft = getAnchoredScrollLeft(tableScroller, 0.82, 120);
+      }
+
+      if (chartScroll && chartScroll.dataset.chartInitialPosition === "right") {
+        chartScroll.scrollLeft = getChartAnchoredScrollLeft(chartScroll);
+      }
+
+      state.shouldPrimeExpandedHistory = false;
+      syncExpandedHistoryLayout();
+    });
+  }
+
+  function getAnchoredScrollLeft(scroller, anchorRatio, contextWidth) {
+    if (!scroller) {
+      return 0;
+    }
+
+    const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    if (maxScrollLeft === 0) {
+      return 0;
+    }
+
+    const desiredVisibleEnd = Math.max(scroller.clientWidth, scroller.scrollWidth - contextWidth);
+    const target = desiredVisibleEnd - scroller.clientWidth * anchorRatio;
+    return Math.max(0, Math.min(maxScrollLeft, Math.round(target)));
+  }
+
+  function getChartAnchoredScrollLeft(chartScroll) {
+    if (!chartScroll) {
+      return 0;
+    }
+
+    const maxScrollLeft = Math.max(0, chartScroll.scrollWidth - chartScroll.clientWidth);
+    if (maxScrollLeft === 0) {
+      return 0;
+    }
+
+    const activeX = Number(chartScroll.dataset.chartActiveX || 0);
+    const xStep = Number(chartScroll.dataset.chartXStep || 0);
+    const pointCount = Number(chartScroll.dataset.chartPointCount || 0);
+    const anchorRatio = window.innerWidth <= 720 ? 0.8 : 0.84;
+    const baseTarget = activeX - chartScroll.clientWidth * anchorRatio;
+    const contextOffset = pointCount > 1 ? xStep * 1.2 : 0;
+    const target = baseTarget - contextOffset;
+    return Math.max(0, Math.min(maxScrollLeft, Math.round(target)));
+  }
+
+  function syncExpandedHistoryLayout() {
+    const tableWrap = document.querySelector("[data-preserve-scroll-id='table-wrap']");
+    const tableScroller = tableWrap ? tableWrap.querySelector(".results-table-wrap") : null;
+
+    document.querySelectorAll(".history-layout").forEach((layout) => {
+      const summaryShell = layout.querySelector(".chart-summary-shell");
+      const chartPanel = layout.querySelector(".history-chart-panel");
+      const chartSummary = summaryShell ? summaryShell.querySelector(".chart-summary") : null;
+
+      if (!summaryShell || !chartPanel || !chartSummary) {
+        return;
+      }
+
+      const availableWidth = tableScroller
+        ? Math.floor(tableScroller.getBoundingClientRect().width)
+        : Math.floor(layout.getBoundingClientRect().width);
+
+      let layoutMode = "mobile";
+      if (window.innerWidth > 720) {
+        layoutMode = availableWidth >= 1180 ? "wide" : "compact";
+      }
+
+      layout.dataset.chartSummaryLayout = layoutMode;
+      summaryShell.dataset.chartSummaryLayout = layoutMode;
+      chartSummary.dataset.chartSummaryLayout = layoutMode;
+
+      if (layoutMode === "mobile") {
+        const mobileWidth = Math.max(220, availableWidth - 12);
+        summaryShell.style.width = `${mobileWidth}px`;
+        summaryShell.style.maxWidth = `${mobileWidth}px`;
+      } else {
+        summaryShell.style.removeProperty("width");
+        summaryShell.style.removeProperty("max-width");
+      }
+    });
+  }
+
+  function syncStickyTableHeader() {
+    teardownStickyTableHeader();
+
+    const tableWrap = document.querySelector("[data-preserve-scroll-id='table-wrap']");
+    const tableScroller = tableWrap ? tableWrap.querySelector(".results-table-wrap") : null;
+    const table = tableWrap ? tableWrap.querySelector(".results-table") : null;
+    const overlay = document.querySelector("[data-sticky-table-header='true']");
+    const overlayTable = overlay ? overlay.querySelector("[data-sticky-table-header-table='true']") : null;
+
+    if (!tableWrap || !tableScroller || !table || !overlay || !overlayTable) {
+      return;
+    }
+
+    const liveHeaders = [...table.querySelectorAll("thead th")];
+    const stickyHeaders = [...overlayTable.querySelectorAll("thead th")];
+
+    if (!liveHeaders.length || liveHeaders.length !== stickyHeaders.length) {
+      return;
+    }
+
+    let syncFrameId = 0;
+
+    const scheduleSync = () => {
+      if (syncFrameId) {
+        return;
+      }
+
+      syncFrameId = window.requestAnimationFrame(() => {
+        syncFrameId = 0;
+        applyStickyTableHeaderLayout();
+      });
+    };
+
+    const applyStickyTableHeaderLayout = () => {
+      const tableRect = table.getBoundingClientRect();
+      const headerRow = table.querySelector("thead tr");
+      const wrapRect = tableScroller.getBoundingClientRect();
+
+      if (!headerRow) {
+        overlay.hidden = true;
+        overlay.classList.remove("is-visible");
+        return;
+      }
+
+      const headerRect = headerRow.getBoundingClientRect();
+      const overlayHeight = Math.ceil(headerRect.height);
+      const isVisible = headerRect.top <= 0
+        && tableRect.bottom > overlayHeight
+        && wrapRect.bottom > overlayHeight
+        && wrapRect.width > 0;
+
+      overlay.hidden = !isVisible;
+      overlay.classList.toggle("is-visible", isVisible);
+
+      if (!isVisible) {
+        return;
+      }
+
+      overlay.style.left = `${Math.round(wrapRect.left)}px`;
+      overlay.style.width = `${Math.round(wrapRect.width)}px`;
+      overlay.style.top = "0px";
+
+      const liveTableWidth = Math.ceil(table.getBoundingClientRect().width);
+      overlayTable.style.width = `${liveTableWidth}px`;
+      overlayTable.style.transform = `translateX(${-tableScroller.scrollLeft}px)`;
+
+      liveHeaders.forEach((headerCell, index) => {
+        const width = Math.ceil(headerCell.getBoundingClientRect().width);
+        stickyHeaders[index].style.width = `${width}px`;
+        stickyHeaders[index].style.minWidth = `${width}px`;
+        stickyHeaders[index].style.maxWidth = `${width}px`;
+      });
+    };
+
+    const handleScroll = () => {
+      scheduleSync();
+    };
+
+    const handleResize = () => {
+      scheduleSync();
+    };
+
+    tableScroller.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", handleResize);
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("scroll", handleScroll, { passive: true });
+      window.visualViewport.addEventListener("resize", handleResize);
+    }
+
+    scheduleSync();
+
+    stickyTableHeaderCleanup = () => {
+      tableScroller.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", handleResize);
+
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("scroll", handleScroll);
+        window.visualViewport.removeEventListener("resize", handleResize);
+      }
+
+      if (syncFrameId) {
+        window.cancelAnimationFrame(syncFrameId);
+        syncFrameId = 0;
+      }
+
+      overlay.hidden = true;
+      overlay.classList.remove("is-visible");
+      overlay.removeAttribute("style");
+      overlayTable.removeAttribute("style");
+      stickyHeaders.forEach((cell) => {
+        cell.style.removeProperty("width");
+        cell.style.removeProperty("min-width");
+        cell.style.removeProperty("max-width");
+      });
+    };
+  }
+
+  function teardownStickyTableHeader() {
+    if (!stickyTableHeaderCleanup) {
+      return;
+    }
+
+    stickyTableHeaderCleanup();
+    stickyTableHeaderCleanup = null;
   }
 
   function wireMapInteractions() {
@@ -3022,4 +3293,3 @@
     return escapeHtml(value);
   }
 })();
-

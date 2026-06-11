@@ -95,7 +95,7 @@ If the workbook changes, the database is rebuilt from scratch.
   Dashboard styling.
 
 - `local-dashboard/public/app.js`
-  Client-side dashboard logic, routing, search, custom filter dropdowns, card rendering, inline history, and map interactions.
+  Client-side dashboard logic, routing, search, custom filter dropdowns, dynamic results table rendering, inline row expansion, price history chart, and map interactions.
 
 - `local-dashboard/public/translations.json`
   Active translation source for commodity, market, and variety labels in English and Kannada.
@@ -288,57 +288,32 @@ Most mappings follow district/taluk geography directly. A small number of market
 - `ENDI` -> treated as `Indi` in Vijayapura district
 - `YARAHALLI` -> mapped to the APMC yard reference in H. D. Kote taluk, Mysuru district
 
-### Results card behavior
+### Results table behavior
 
-The current results surface shows:
+The current results surface shows a **table layout** (replaced cards as of June 2026).
 
 - the latest row only for each exact `commodity + market + variety + grade` combination after applying the selected context and active filters
 - results sorted by `market`
-- one full-width card per result on both mobile and desktop
-- context-aware primary headings inside each card:
-  - market search -> commodity is primary
-  - commodity search -> market is primary
-  - variety search -> market is primary, with variety and grade grouped below
-- grouped card sections for:
-  - identity
-  - prices
-  - arrivals / units
-  - price updates
-
-Card content currently includes:
-
-- a single top-line anchor value only, with no extra `Market` / `Commodity` label above it
-- `Arrivals And Units`
-- price labels with rupee units:
+- one row per result, all results in a single scrollable table
+- context-aware identity columns (columns before the price columns change based on search type):
+  - market search -> first column is Commodity, then Variety, Grade
+  - commodity search -> first column is Market, then Variety, Grade
+  - variety search -> first column is Market, then Grade only (commodity + variety already shown in the context bubble above the table)
+- fixed trailing columns for all context types:
+  - `Arrivals & Units`
   - `Max Price (Rs.)`
   - `Min Price (Rs.)`
   - `Modal Price (Rs.)`
-- a single `Price Updates` block with:
-  - `Latest`
-  - `Previous`
+  - `Latest Update`
+  - `Previous Update`
 
-Current card layout details:
+Table header details:
 
-- the anchor value on the first line is shown alone as the strongest card heading
-- `Variety` and `Grade` sit beneath that heading
-- `Arrivals And Units` is rendered as a compact two-column row:
-  - field label on the left
-  - value right-aligned on the same row
-- `Price Updates` shows `Latest` and `Previous` side by side
-- the results view header uses `Showing Results For` plus larger locked context chips
+- sticky header row using dark green accent (`#1b4332`) with white text
+- header stays fixed at the top of the viewport as the user scrolls down
+- on mobile (≤640px) the table wrapper switches to `overflow-x: auto` for horizontal scrolling
 
-The results UI also currently uses:
-
-- tighter mobile padding than the earlier prototype
-- only locked context chips at the top of the results view, with no duplicate black heading text
-- a top-left `Home` button beside the language toggle area
-- a floating filter action button with an onboarding hint animation
-
-For each result card, the price block also shows the absolute change from the previous comparable update for the exact:
-
-- `commodity + market + variety + grade`
-
-Delta behavior:
+Price delta behavior (shown stacked below each price value in its cell):
 
 - increase -> green rising indicator with `+value`
 - decrease -> red falling indicator with `-value`
@@ -347,9 +322,9 @@ Delta behavior:
 
 Both date values use `DD-MM-YYYY`.
 
-### Card expansion
+### Row expansion
 
-Clicking `See Price History` expands an **inline history panel inside the card** for the exact:
+Clicking any table row expands an **inline history panel spanning all columns** for the exact:
 
 - `commodity + market + variety + grade`
 
@@ -435,9 +410,9 @@ Implemented and working:
 - custom filter dropdown menus contained within the card on mobile
 - floating filter action button on the table screen
 - popup-based staged multi-select filters with typed search, removable chips, explicit apply, and clear actions
-- latest-row-only results cards
-- card price deltas against the previous comparable update
-- inline card expansion
+- latest-row-only results table with context-aware dynamic identity columns
+- price deltas stacked below each price value in the table
+- inline row expansion (clicking a row expands chart spanning full table width)
 - inline price history chart
 - selected-point chart tooltip and summary values
 - interactive district map on the home screen
